@@ -114,7 +114,8 @@ const ProductCatalog=(()=>{
     }
     return 'catalog:'+family.slug+':'+encodeURIComponent(model);
   }
-  const modelKeys=new Set(),modelLookup=new Map();
+  // exactLookup: DB model_name as stored (no case folding, no partial match) -> product key.
+  const modelKeys=new Set(),modelLookup=new Map(),exactLookup=new Map();
   async function loadModels(){
     const response=await fetch('/api/catalog/models',{signal:AbortSignal.timeout(8000)});
     if(!response.ok)throw Error('제품 DB 연결 실패');
@@ -125,12 +126,16 @@ const ProductCatalog=(()=>{
       if(!family)continue;
       const key=keyFor(family,code);
       if(componentOnly(key))continue;
-      modelKeys.add(key);modelLookup.set(category+'|'+code.toUpperCase(),key);
+      modelKeys.add(key);modelLookup.set(category+'|'+code.toUpperCase(),key);exactLookup.set(code,key);
     }
     if(!modelKeys.size)throw Error('지원되는 제품 모델이 없어요.');
   }
   const hasModel=key=>modelKeys.has(key);
   const matchModel=(category,code)=>typeof code==='string'&&modelLookup.get(category+'|'+code.trim().toUpperCase());
+  // LG CAMERA sends the official model name only, without a category. DB model names are unique across categories.
+  function exactModel(code){
+    return typeof code==='string'?exactLookup.get(code):undefined;
+  }
   function restore(products,key){
     if(typeof key!=='string'||oldSales.has(key))return;
     if(Object.hasOwn(products,key))return products[key];
@@ -288,5 +293,5 @@ const ProductCatalog=(()=>{
     $('library').addEventListener('close',cancel);
     return {gallery,resume(){ $('catalogBrowse').hidden=false;list() }};
   }
-  return {restore,applyBody,loadSalesName,browser,representatives:()=>families.map(f=>keyFor(f,f.model)).filter(hasModel),loadModels,hasModel,matchModel,purifierModels,componentOnly,loadBodies,loadRetiredSales,migratePlacement,retiredSale:key=>oldSales.get(key)};
+  return {restore,applyBody,loadSalesName,browser,representatives:()=>families.map(f=>keyFor(f,f.model)).filter(hasModel),loadModels,hasModel,matchModel,exactModel,purifierModels,componentOnly,loadBodies,loadRetiredSales,migratePlacement,retiredSale:key=>oldSales.get(key)};
 })();

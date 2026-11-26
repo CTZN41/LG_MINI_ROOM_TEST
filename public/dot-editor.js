@@ -1,3 +1,6 @@
+// LG CAMERA (model label scanner) address. Change it here only.
+// For local tests, ?camera=http://localhost:4173 overrides it. Only loopback addresses are accepted.
+const LG_CAMERA_URL='https://lg-camera-lab.pages.dev';
 (() => {
   'use strict';
   const M=DotScene, $=id=>document.getElementById(id);
@@ -1857,6 +1860,37 @@ function createLivingRoom({model,space,compareWashers,M,$,list,id,room,tone,noti
     inventory();refresh();render();$('catalogBrowse').hidden=true;showCollectionResult(item,row,true);
   }}):null;
   if(catalog)$('openCatalog').onclick=()=>{photoPicker.reset();catalog.gallery();$('library').scrollTop=0};
+  if(space==='dream')$('lgCamera').onclick=()=>{
+    // The current address (space, room and ?camera) becomes returnTo, so the editor reopens in the same state.
+    location.assign(lgCameraBase(params)+'/scan?returnTo='+encodeURIComponent(location.href));
+  };
+  // Only the model name is read from lgcam_item. Names come from the product DB. Nothing else is kept.
+  function cameraReturn(){
+    const result=params.get('lgcam');
+    if(result===null)return;
+    let code=null;
+    if(result==='registered'){
+      try{const item=JSON.parse(params.get('lgcam_item')||'null');if(typeof item?.modelCode==='string')code=item.modelCode}catch{}
+    }
+    const url=new URL(location.href);url.searchParams.delete('lgcam');url.searchParams.delete('lgcam_item');
+    history.replaceState(history.state,'',url);
+    if(space!=='dream')return;
+    openLibrary();
+    if(result!=='registered')return;
+    const key=code&&ProductCatalog.exactModel(code),product=key&&ProductCatalog.restore(M.products,key);
+    if(!product){
+      $('libraryStatus').textContent=code?'미니룸 제품 DB에 없는 모델입니다 (모델명 '+code.slice(0,60)+')':
+        'LG CAMERA 결과에 모델명이 없어요. 다시 찍거나 아래 목록에서 선택하세요.';
+      return;
+    }
+    const already=model.collected(key);
+    if(!already){
+      try{model.collect(key,'camera')}catch(e){$('libraryStatus').textContent=e.message;return}
+      inventory();refresh();render();
+    }
+    showCollectionResult(product,$('libraryItems'));
+    if(already)$('libraryTitle').textContent='이미 수집한 제품';
+  }
   function openLibrary(){
     photoPicker?.reset();
     $('collectionResult').hidden=true;$('libraryBrowse').hidden=false;
@@ -2140,11 +2174,23 @@ function createLivingRoom({model,space,compareWashers,M,$,list,id,room,tone,noti
       openBag();
     }
     if(samplePreview)startSamplePreview();
+    if(!readOnly)cameraReturn();
     if(model.storageMessage)notice(model.storageMessage);
     window.addEventListener('pageshow',e=>{if(e.persisted)location.reload()});
   }
   const interactive=o=>!menu&&(isAppliance(o.k)||o.k==='sofa'||(my&&isFurniture(o)));
   return {enter,registeredReplacement,visible,allowed,owned,isAppliance,bindUnit,interactive,restoreDeviceIds,identifyDevices,placementClue,editing:()=>editMode,frame,tap,canAdd,reset};
+}
+
+function lgCameraBase(params){
+  const requested=params.get('camera');
+  if(requested){
+    try{
+      const url=new URL(requested);
+      if(/^https?:$/.test(url.protocol)&&['localhost','127.0.0.1','[::1]'].includes(url.hostname))return url.origin;
+    }catch{}
+  }
+  return LG_CAMERA_URL;
 }
 
 function createPhotoPicker({$,showProducts,isCollectible,recognizePhoto,provider}){
